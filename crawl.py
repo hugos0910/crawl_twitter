@@ -9,12 +9,6 @@ from tweepy.streaming import StreamListener
 from tweepy import OAuthHandler
 from tweepy import Stream
 
-def xpath(value, path):
-  for name in path.split(): 
-    value = value.get(name) 
-    if not value: return None
-  return value
-
 class MySQLListener(StreamListener):
   def __init__(self, config):
     super(StreamListener, self).__init__()
@@ -25,22 +19,39 @@ class MySQLListener(StreamListener):
     self.cursor = self.connection.cursor()
 
   def on_data(self, data):
+    def xpath(value, path):
+      for name in path.split(): 
+        value = value.get(name) 
+        if not value: return None
+      return value
+
+    def sanitize_string(s):
+      return "\"%s\"" % s.encode('utf8') if s else "null"
+      
     tweet = json.loads(data)
     coordinates = xpath(tweet, "coordinates coordinates")
-    lat = str(coordinates[1]) if coordinates else "null"
-    lng = str(coordinates[0]) if coordinates else "null"
-    city = xpath(tweet, "place full_name") if xpath(tweet, "place place_type") == "city" else "null"
-    country = xpath(tweet, "place country") or "null"
+    lat = str(coordinates[1]) if coordinates else None
+    lng = str(coordinates[0]) if coordinates else None
+    city = xpath(tweet, "place full_name") if xpath(tweet, "place place_type") == "city" else None
+    country = xpath(tweet, "place country")
     name = xpath(tweet, "user name")
-    created_at = int(time.mktime(datetime.datetime.strptime(tweet["created_at"], "%a %b %d %H:%M:%S +0000 %Y").timetuple()))
-    query = "INSERT INTO tweets VALUES (default, %s, %s, %d, %s, %s, %d, \"%s\", \"%s\", %d)" % (lng, lat, tweet.get("favrotie_count", 0), city, country, tweet.get("retweet_count", 0), tweet.get("text"), name, created_at)
+    created_at = int(time.mktime(datetime.datetime
+                   .strptime(tweet["created_at"], "%a %b %d %H:%M:%S +0000 %Y").timetuple()))
+    query = ("INSERT INTO tweets VALUES (default, %d, %s, %s, %s, %s, %s, %s)"
+               % (created_at,
+                  lat or "null",
+                  lng or "null",
+                  sanitize_string(city),
+                  sanitize_string(country),
+                  sanitize_string(name),
+                  sanitize_string(tweet["text"])))
     self.cursor.execute(query)
     self.connection.commit()
 
 if __name__ == '__main__':
   config = json.load(open(sys.argv[1]))
-  listener = MySQLListener(config)
   auth = OAuthHandler(config['consumer_key'], config['consumer_secret'])
   auth.set_access_token(config['access_token'], config['access_token_secret'])
-  stream = Stream(auth, listener)
-  stream.filter(track=['python', 'javascript', 'ruby'], languages=["en"])
+  
+  stream = Stream(auth, MySQLListener(config))
+  stream.filter(track=['swift', 'golang'], languages=["en"])
