@@ -9,6 +9,7 @@ from tweepy.streaming import StreamListener
 from tweepy import OAuthHandler
 from tweepy import Stream
 
+
 class MySQLListener(StreamListener):
   def __init__(self, config):
     super(StreamListener, self).__init__()
@@ -21,12 +22,14 @@ class MySQLListener(StreamListener):
   def on_data(self, data):
     def xpath(value, path):
       for name in path.split(): 
-        value = value.get(name) 
+        # print value 
+        value = value.get(name)
+        # print value 
         if not value: return None
       return value
 
     def sanitize_string(s):
-      return "\"%s\"" % s.encode('utf8') if s else "null"
+      return s.encode('utf8') if s else None
       
     tweet = json.loads(data)
     coordinates = xpath(tweet, "coordinates coordinates")
@@ -37,16 +40,18 @@ class MySQLListener(StreamListener):
     name = xpath(tweet, "user name")
     created_at = int(time.mktime(datetime.datetime
                    .strptime(tweet["created_at"], "%a %b %d %H:%M:%S +0000 %Y").timetuple()))
-    query = ("INSERT INTO tweets VALUES (default, %d, %s, %s, %s, %s, %s, %s)"
-               % (created_at,
-                  lat or "null",
-                  lng or "null",
-                  sanitize_string(city),
-                  sanitize_string(country),
-                  sanitize_string(name),
-                  sanitize_string(tweet["text"])))
-    self.cursor.execute(query)
-    self.connection.commit()
+
+    query = "insert into tweets(created_at, Latitude, Longitude, City, Country, Name, Tweet) values (%s, %s, %s, %s, %s, %s, %s)"
+    values = (created_at, lat, lng, sanitize_string(city), sanitize_string(country), sanitize_string(name), sanitize_string(tweet["text"]))
+
+    try:
+      self.cursor.execute(query, values)
+      self.connection.commit()
+      print 'Tweet # %d collected' % tweet['id']
+    except Exception as e:
+      print query
+      print e
+      exit(1)
 
 if __name__ == '__main__':
   config = json.load(open(sys.argv[1]))
@@ -54,4 +59,4 @@ if __name__ == '__main__':
   auth.set_access_token(config['access_token'], config['access_token_secret'])
   
   stream = Stream(auth, MySQLListener(config))
-  stream.filter(track=['swift', 'golang'], languages=["en"])
+  stream.filter(track=['data science', 'machine learning', 'deep learning'], languages=["en"])
